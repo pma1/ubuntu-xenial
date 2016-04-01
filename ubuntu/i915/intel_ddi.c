@@ -2812,11 +2812,11 @@ static void broxton_phy_init(struct drm_i915_private *dev_priv,
 	I915_WRITE(BXT_PHY_CTL_FAMILY(phy), val);
 }
 
-void broxton_ddi_phy_init(struct drm_device *dev)
+void broxton_ddi_phy_init(struct drm_i915_private *dev_priv)
 {
 	/* Enable PHY1 first since it provides Rcomp for PHY0 */
-	broxton_phy_init(dev->dev_private, DPIO_PHY1);
-	broxton_phy_init(dev->dev_private, DPIO_PHY0);
+	broxton_phy_init(dev_priv, DPIO_PHY1);
+	broxton_phy_init(dev_priv, DPIO_PHY0);
 }
 
 static void broxton_phy_uninit(struct drm_i915_private *dev_priv,
@@ -2833,10 +2833,8 @@ static void broxton_phy_uninit(struct drm_i915_private *dev_priv,
 	I915_WRITE(BXT_P_CR_GT_DISP_PWRON, val);
 }
 
-void broxton_ddi_phy_uninit(struct drm_device *dev)
+void broxton_ddi_phy_uninit(struct drm_i915_private *dev_priv)
 {
-	struct drm_i915_private *dev_priv = dev->dev_private;
-
 	broxton_phy_uninit(dev_priv, DPIO_PHY1);
 	broxton_phy_uninit(dev_priv, DPIO_PHY0);
 }
@@ -3067,8 +3065,8 @@ void intel_ddi_pll_init(struct drm_device *dev)
 		if (!(I915_READ(LCPLL1_CTL) & LCPLL_PLL_ENABLE))
 			DRM_ERROR("LCPLL1 is disabled\n");
 	} else if (IS_BROXTON(dev)) {
-		broxton_init_cdclk(dev);
-		broxton_ddi_phy_init(dev);
+		broxton_init_cdclk(dev_priv);
+		broxton_ddi_phy_init(dev_priv);
 	} else {
 		/*
 		 * The LCPLL register should be turned on by the BIOS. For now
