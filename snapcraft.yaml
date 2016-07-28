@@ -1,0 +1,16 @@
+name: ubuntu-snapdragon-kernel
+version: 4.4.0
+summary: The 96Board's Dragonboard kernel for snappy
+description: This is a snapped kernel, based off the xenial snapdragon branch and config
+type: kernel
+
+parts:
+  kernel:
+    plugin: kernel
+    source: .
+    source-type: git
+    kdefconfig: ['--makefile=debian/snapcraft.mk', 'branch=snapdragon','flavour=snapdragon', 'config']
+    kconfigs:
+      - CONFIG_LOCALVERSION="-xenial_snapdragon"
+      - CONFIG_DEBUG_INFO=n
+    kernel-image-target: Image
