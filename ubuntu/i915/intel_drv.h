@@ -472,6 +472,12 @@ struct intel_crtc_state {
 
 	uint8_t lane_count;
 
+	/*
+	 * Used by platforms having DP/HDMI PHY with programmable lane
+	 * latency optimization.
+	 */
+	uint8_t lane_lat_optim_mask;
+
 	/* Panel fitter controls for gen2-gen4 + VLV */
 	struct {
 		u32 control;
@@ -1181,10 +1187,15 @@ void intel_prepare_reset(struct drm_device *dev);
 void intel_finish_reset(struct drm_device *dev);
 void hsw_enable_pc8(struct drm_i915_private *dev_priv);
 void hsw_disable_pc8(struct drm_i915_private *dev_priv);
-void broxton_init_cdclk(struct drm_device *dev);
-void broxton_uninit_cdclk(struct drm_device *dev);
-void broxton_ddi_phy_init(struct drm_device *dev);
-void broxton_ddi_phy_uninit(struct drm_device *dev);
+void broxton_init_cdclk(struct drm_i915_private *dev_priv);
+void broxton_uninit_cdclk(struct drm_i915_private *dev_priv);
+bool broxton_cdclk_verify_state(struct drm_i915_private *dev_priv);
+void bxt_ddi_phy_init(struct drm_i915_private *dev_priv, enum dpio_phy phy);
+void bxt_ddi_phy_uninit(struct drm_i915_private *dev_priv, enum dpio_phy phy);
+bool bxt_ddi_phy_is_enabled(struct drm_i915_private *dev_priv,
+			    enum dpio_phy phy);
+bool bxt_ddi_phy_verify_state(struct drm_i915_private *dev_priv,
+			      enum dpio_phy phy);
 void bxt_enable_dc9(struct drm_i915_private *dev_priv);
 void bxt_disable_dc9(struct drm_i915_private *dev_priv);
 void skl_init_cdclk(struct drm_i915_private *dev_priv);
@@ -1425,6 +1436,8 @@ int intel_power_domains_init(struct drm_i915_private *);
 void intel_power_domains_fini(struct drm_i915_private *);
 void intel_power_domains_init_hw(struct drm_i915_private *dev_priv, bool resume);
 void intel_power_domains_suspend(struct drm_i915_private *dev_priv);
+void bxt_display_core_init(struct drm_i915_private *dev_priv, bool resume);
+void bxt_display_core_uninit(struct drm_i915_private *dev_priv);
 void skl_pw1_misc_io_init(struct drm_i915_private *dev_priv);
 void skl_pw1_misc_io_fini(struct drm_i915_private *dev_priv);
 void intel_runtime_pm_enable(struct drm_i915_private *dev_priv);

@@ -4966,6 +4966,10 @@ static void haswell_crtc_enable(struct drm_crtc *crtc)
 		intel_set_pch_fifo_underrun_reporting(dev_priv, TRANSCODER_A,
 						      false);
 
+	for_each_encoder_on_crtc(dev, crtc, encoder)
+		if (encoder->pre_pll_enable)
+			encoder->pre_pll_enable(encoder);
+
 	if (intel_crtc_to_shared_dpll(intel_crtc))
 		intel_enable_shared_dpll(intel_crtc);
 
@@ -5452,9 +5456,8 @@ static void intel_update_cdclk(struct drm_device *dev)
 		intel_update_max_cdclk(dev);
 }
 
-static void broxton_set_cdclk(struct drm_device *dev, int frequency)
+static void broxton_set_cdclk(struct drm_i915_private *dev_priv, int frequency)
 {
-	struct drm_i915_private *dev_priv = dev->dev_private;
 	uint32_t divider;
 	uint32_t ratio;
 	uint32_t current_freq;
@@ -5568,32 +5571,45 @@ static void broxton_set_cdclk(struct drm_device *dev, int frequency)
 		return;
 	}
 
-	intel_update_cdclk(dev);
+	intel_update_cdclk(dev_priv->dev);
 }
 
-void broxton_init_cdclk(struct drm_device *dev)
+static bool broxton_cdclk_is_enabled(struct drm_i915_private *dev_priv)
 {
-	struct drm_i915_private *dev_priv = dev->dev_private;
-	uint32_t val;
+	if (!(I915_READ(BXT_DE_PLL_ENABLE) & BXT_DE_PLL_PLL_ENABLE))
+		return false;
 
-	/*
-	 * NDE_RSTWRN_OPT RST PCH Handshake En must always be 0b on BXT
-	 * or else the reset will hang because there is no PCH to respond.
-	 * Move the handshake programming to initialization sequence.
-	 * Previously was left up to BIOS.
-	 */
-	val = I915_READ(HSW_NDE_RSTWRN_OPT);
-	val &= ~RESET_PCH_HANDSHAKE_ENABLE;
-	I915_WRITE(HSW_NDE_RSTWRN_OPT, val);
+	/* TODO: Check for a valid CDCLK rate */
 
-	/* Enable PG1 for cdclk */
-	intel_display_power_get(dev_priv, POWER_DOMAIN_PLLS);
+	if (!(I915_READ(DBUF_CTL) & DBUF_POWER_REQUEST)) {
+		DRM_DEBUG_DRIVER("CDCLK enabled, but DBUF power not requested\n");
 
+		return false;
+	}
+
+	if (!(I915_READ(DBUF_CTL) & DBUF_POWER_STATE)) {
+		DRM_DEBUG_DRIVER("CDCLK enabled, but DBUF power hasn't settled\n");
+
+		return false;
+	}
+
+	return true;
+}
+
+bool broxton_cdclk_verify_state(struct drm_i915_private *dev_priv)
+{
+	return broxton_cdclk_is_enabled(dev_priv);
+}
+
+void broxton_init_cdclk(struct drm_i915_private *dev_priv)
+{
 	/* check if cd clock is enabled */
-	if (I915_READ(BXT_DE_PLL_ENABLE) & BXT_DE_PLL_PLL_ENABLE) {
-		DRM_DEBUG_KMS("Display already initialized\n");
+	if (broxton_cdclk_is_enabled(dev_priv)) {
+		DRM_DEBUG_KMS("CDCLK already enabled, won't reprogram it\n");
 		return;
 	}
+
+	DRM_DEBUG_KMS("CDCLK not enabled, enabling it\n");
 
 	/*
 	 * FIXME:
@@ -5602,7 +5618,7 @@ void broxton_init_cdclk(struct drm_device *dev)
 	 * - check if setting the max (or any) cdclk freq is really necessary
 	 *   here, it belongs to modeset time
 	 */
-	broxton_set_cdclk(dev, 624000);
+	broxton_set_cdclk(dev_priv, 624000);
 
 	I915_WRITE(DBUF_CTL, I915_READ(DBUF_CTL) | DBUF_POWER_REQUEST);
 	POSTING_READ(DBUF_CTL);
@@ -5613,10 +5629,8 @@ void broxton_init_cdclk(struct drm_device *dev)
 		DRM_ERROR("DBuf power enable timeout!\n");
 }
 
-void broxton_uninit_cdclk(struct drm_device *dev)
+void broxton_uninit_cdclk(struct drm_i915_private *dev_priv)
 {
-	struct drm_i915_private *dev_priv = dev->dev_private;
-
 	I915_WRITE(DBUF_CTL, I915_READ(DBUF_CTL) & ~DBUF_POWER_REQUEST);
 	POSTING_READ(DBUF_CTL);
 
@@ -5626,9 +5640,7 @@ void broxton_uninit_cdclk(struct drm_device *dev)
 		DRM_ERROR("DBuf power disable timeout!\n");
 
 	/* Set minimum (bypass) frequency, in effect turning off the DE PLL */
-	broxton_set_cdclk(dev, 19200);
-
-	intel_display_power_put(dev_priv, POWER_DOMAIN_PLLS);
+	broxton_set_cdclk(dev_priv, 19200);
 }
 
 static const struct skl_cdclk_entry {
@@ -9641,7 +9653,7 @@ static void broxton_modeset_commit_cdclk(struct drm_atomic_state *old_state)
 		to_intel_atomic_state(old_state);
 	unsigned int req_cdclk = old_intel_state->dev_cdclk;
 
-	broxton_set_cdclk(dev, req_cdclk);
+	broxton_set_cdclk(to_i915(dev), req_cdclk);
 }
 
 /* compute the max rate for new configuration */
@@ -12631,6 +12643,7 @@ intel_pipe_config_compare(struct drm_device *dev,
 
 	PIPE_CONF_CHECK_I(has_dp_encoder);
 	PIPE_CONF_CHECK_I(lane_count);
+	PIPE_CONF_CHECK_X(lane_lat_optim_mask);
 
 	if (INTEL_INFO(dev)->gen < 8) {
 		PIPE_CONF_CHECK_M_N(dp_m_n);
